@@ -1,0 +1,32 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Temporary files
+*.tmp
+sample.txt
+sample.json
+sample.png
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+
+
