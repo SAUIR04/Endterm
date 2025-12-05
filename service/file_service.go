@@ -3,11 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"mime"
 	"path/filepath"
+	"time"
 
 	"Endterm/config"
+	"Endterm/models"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -26,7 +27,7 @@ func NewFileService() *FileService {
 	}
 }
 
-func (s *FileService) UploadFile(filePath string, objectName string) error {
+func (s *FileService) UploadFile(filePath string, objectName string) (*models.File, error) {
 	contentType := mime.TypeByExtension(filepath.Ext(filePath))
 	if contentType == "" {
 		contentType = "application/octet-stream"
@@ -36,9 +37,17 @@ func (s *FileService) UploadFile(filePath string, objectName string) error {
 		ContentType: contentType,
 	})
 	if err != nil {
-		return fmt.Errorf("ошибка при загрузке файла: %w", err)
+		return nil, fmt.Errorf("ошибка при загрузке файла в MinIO: %w", err)
 	}
 
-	log.Printf("✓ Файл '%s' загружен. Размер: %d байт", objectName, info.Size)
-	return nil
+	f := &models.File{
+		ID:           objectName,
+		Name:         objectName,
+		OriginalName: filepath.Base(filePath),
+		Size:         info.Size,
+		ContentType:  contentType,
+		UploadedAt:   time.Now(),
+	}
+
+	return f, nil
 }

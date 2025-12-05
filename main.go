@@ -2,29 +2,32 @@ package main
 
 import (
 	"log"
+	"net/http"
+	"time"
+
 	"Endterm/config"
 	"Endterm/controller"
 	"Endterm/service"
 )
 
 func main() {
-	log.Println("Инициализация MinIO...")
+
 	config.InitMinioClient()
 
-	s := service.NewFileService()
-	c := controller.NewController(s)
+	fs := service.NewFileService()
+	ctrl := controller.NewController(fs)
 
-	if err := c.UploadTXT(); err != nil {
-		log.Fatalf("TXT error: %v", err)
+	http.HandleFunc("/upload", ctrl.UploadHandler)
+
+	addr := ":8080"
+	srv := &http.Server{
+		Addr:         addr,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
 	}
 
-	if err := c.UploadJSON(); err != nil {
-		log.Fatalf("JSON error: %v", err)
+	log.Println("Server started at", addr)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalln("server error:", err)
 	}
-
-	if err := c.UploadPNG(); err != nil {
-		log.Fatalf("PNG error: %v", err)
-	}
-
-	log.Println("✓ Все файлы успешно загружены!")
 }
