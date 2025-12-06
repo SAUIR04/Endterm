@@ -2,7 +2,15 @@ package controller
 
 import (
 	"encoding/json"
+	"io"
+	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
+	"path/filepath"
+	"time"
+
+	"Endterm/models"
 	"Endterm/service"
 )
 
@@ -14,35 +22,48 @@ func NewController(s *service.FileService) *Controller {
 	return &Controller{service: s}
 }
 
-func (c *Controller) UploadTXT() error {
-	if err := os.WriteFile("sample.txt", []byte("Это тестовый текстовый файл.\nЗагружен в MinIO/S3 бакет.\nТип: TXT"), 0644); err != nil {
-		return err
+func (c *Controller) UploadHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<20)
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		http.Error(w, "ошибка парсинга multipart form: "+err.Error(), http.StatusBadRequest)
+		return
 	}
-	defer os.Remove("sample.txt")
-	return c.service.UploadFile("sample.txt", "files/text/sample.txt")
-}
 
-func (c *Controller) UploadJSON() error {
-	data, err := json.MarshalIndent(map[string]interface{}{
-		"name": "MinIO Upload Service",
-		"version": "1.0.0",
-		"tags": []string{"minio", "s3", "storage", "go"},
-	}, "", "  ")
+	file, header, err := r.FormFile("file")
 	if err != nil {
-		return err
+		http.Error(w, "поле file обязательно: "+err.Error(), http.StatusBadRequest)
+		return
 	}
-	if err := os.WriteFile("sample.json", data, 0644); err != nil {
-		return err
+	defer file.Close()
+
+	uploaded, err := c.saveAndUpload(file, header)
+	if err != nil {
+		log.Println("upload error:", err)
+		http.Error(w, "ошибка загрузки: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-	defer os.Remove("sample.json")
-	return c.service.UploadFile("sample.json", "files/json/sample.json")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(uploaded)
 }
 
-func (c *Controller) UploadPNG() error {
-	png := []byte{0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0x00,0x00,0x00,0x0D,0x49,0x48,0x44,0x52,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x08,0x06,0x00,0x00,0x00,0x1F,0x15,0xC4,0x89,0x00,0x00,0x00,0x0A,0x49,0x44,0x41,0x54,0x78,0x9C,0x63,0x00,0x01,0x00,0x00,0x05,0x00,0x01,0x0D,0x0A,0x2D,0xB4,0x00,0x00,0x00,0x00,0x49,0x45,0x4E,0x44,0xAE,0x42,0x60,0x82}
-	if err := os.WriteFile("sample.png", png, 0644); err != nil {
-		return err
+func (c *Controller) saveAndUpload(file multipart.File, header *multipart.FileHeader) (*models.File, error) {
+
+	tempFile, err := os.CreateTemp("", "upload-*"+filepath.Ext(header.Filename))
+	if err != nil {
+		return nil, err
 	}
-	defer os.Remove("sample.png")
-	return c.service.UploadFile("sample.png", "files/images/sample.png")
+
+	defer func() {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+	}()
+
+	if _, err := io.Copy(tempFile, file); err != nil {
+		return nil, err
+	}
+
+	objectName := filepath.Join("", time.Now().Format("20060102-150405")+"-"+header.Filename)
+
+	return c.service.UploadFile(tempFile.Name(), objectName)
 }
